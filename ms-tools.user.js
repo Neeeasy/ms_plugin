@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MS Tools
 // @namespace    ms-tools
-// @version      1.3
+// @version      1.4
 // @description  Инструменты для работы с ролями
 // @author       Kirill
 // @match        http://*/*
@@ -25,6 +25,8 @@ let lastUrl = location.href;
 let intervalId = null;
 let filterEnabled = false;
 let filterBtnRef = null;
+let cipherObserver = null;
+let cipherInitDone = false;
 
 function isCorrectPage() {
     return location.pathname.startsWith('/settings/userscontrol');
@@ -290,6 +292,36 @@ color:#c62828;
 .mstroy-status-copy{
 color:#1565c0;
 }
+
+.mstroy-cipher-copy-btn{
+border:none;
+background:transparent;
+cursor:pointer;
+font-size:14px;
+line-height:1;
+padding:2px 4px;
+border-radius:4px;
+opacity:.45;
+flex:0 0 auto;
+}
+
+.mstroy-cipher-copy-btn:hover{
+opacity:1;
+background:rgba(25,118,210,0.08);
+}
+
+.mstroy-cipher-tooltip{
+background:rgba(33,33,33,.95);
+color:#fff;
+padding:6px 10px;
+border-radius:6px;
+font-size:12px;
+font-weight:600;
+white-space:nowrap;
+box-shadow:0 4px 14px rgba(0,0,0,.18);
+opacity:1;
+transition:opacity .18s ease, transform .18s ease;
+}
 `;
 
     document.head.appendChild(style);
@@ -365,6 +397,14 @@ function removeControls() {
 }
 
 function tick() {
+    if (isTasksRegistryPage()) {
+        createStyles();
+        initCipherTools();
+    } else {
+        stopCipherObserver();
+        cipherInitDone = false;
+    }
+
     if (!isCorrectPage()) {
         removeControls();
         return;
@@ -378,12 +418,14 @@ function tick() {
     createControls();
     updateControls();
 }
-
+    
 function onUrlChange() {
     if (location.href === lastUrl) return;
 
     lastUrl = location.href;
     removeControls();
+    stopCipherObserver();
+    cipherInitDone = false;
 
     setTimeout(tick, 100);
     setTimeout(tick, 500);
@@ -405,6 +447,182 @@ function patchHistoryMethods() {
         window.dispatchEvent(new Event('tm-location-change'));
         return result;
     };
+}
+
+function isTasksRegistryPage() {
+    return location.pathname.includes('/constructionTasksControl/construction/tasks');
+}
+
+function getCipherCells() {
+    return [...document.querySelectorAll('.ag-cell[col-id="cipher"]')];
+}
+
+async function copyText(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const ok = document.execCommand('copy');
+        textarea.remove();
+
+        return ok;
+    }
+}
+
+function removeExistingCipherTooltip() {
+    document.querySelectorAll('.mstroy-cipher-tooltip').forEach(el => el.remove());
+}
+
+function showCipherTooltip(target, text = 'Скопировано') {
+    removeExistingCipherTooltip();
+
+    const rect = target.getBoundingClientRect();
+    const tooltip = document.createElement('div');
+
+    tooltip.className = 'mstroy-cipher-tooltip';
+    tooltip.textContent = text;
+
+    tooltip.style.position = 'fixed';
+    tooltip.style.left = `${rect.left + rect.width / 2}px`;
+    tooltip.style.top = `${rect.top - 8}px`;
+    tooltip.style.transform = 'translate(-50%, -100%)';
+    tooltip.style.zIndex = '999999';
+    tooltip.style.pointerEvents = 'none';
+
+    document.body.appendChild(tooltip);
+
+    setTimeout(() => {
+        tooltip.style.opacity = '0';
+        tooltip.style.transform = 'translate(-50%, calc(-100% - 4px))';
+    }, 900);
+
+    setTimeout(() => {
+        tooltip.remove();
+    }, 1200);
+}
+
+function createCipherCopyButton(cipherText) {
+    const btn = document.createElement('button');
+    btn.className = 'mstroy-cipher-copy-btn';
+    btn.type = 'button';
+    btn.title = `Скопировать шифр: ${cipherText}`;
+    btn.textContent = '📋';
+
+    btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const ok = await copyText(cipherText);
+
+        if (ok) {
+            showCipherTooltip(btn, 'Скопировано');
+        } else {
+            showCipherTooltip(btn, 'Ошибка');
+        }
+    });
+
+    btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    btn.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    return btn;
+}
+
+function enhanceCipherCell(cell) {
+    if (!cell || cell.dataset.mstroyCipherEnhanced === '1') return;
+
+    const cipherText = (cell.getAttribute('title') || cell.textContent || '').trim();
+    if (!cipherText) return;
+
+    cell.dataset.mstroyCipherEnhanced = '1';
+    cell.style.display = 'flex';
+    cell.style.alignItems = 'center';
+    cell.style.justifyContent = 'space-between';
+    cell.style.gap = '6px';
+    cell.style.paddingRight = '6px';
+
+    let textSpan = cell.querySelector(':scope > span');
+
+    if (!textSpan) {
+        textSpan = document.createElement('span');
+        textSpan.textContent = cipherText;
+        cell.textContent = '';
+        cell.appendChild(textSpan);
+    }
+
+    textSpan.style.minWidth = '0';
+    textSpan.style.overflow = 'hidden';
+    textSpan.style.textOverflow = 'ellipsis';
+    textSpan.style.whiteSpace = 'nowrap';
+    textSpan.style.flex = '1 1 auto';
+
+    const btn = createCipherCopyButton(cipherText);
+    cell.appendChild(btn);
+}
+
+function enhanceCipherCells() {
+    if (!isTasksRegistryPage()) return;
+
+    getCipherCells().forEach(enhanceCipherCell);
+}
+
+function startCipherObserver() {
+    stopCipherObserver();
+
+    if (!isTasksRegistryPage()) return;
+
+    const gridRoot =
+        document.querySelector('.ag-root') ||
+        document.querySelector('.ag-body-viewport') ||
+        document.body;
+
+    cipherObserver = new MutationObserver(() => {
+        enhanceCipherCells();
+    });
+
+    cipherObserver.observe(gridRoot, {
+        childList: true,
+        subtree: true
+    });
+
+    enhanceCipherCells();
+}
+
+function stopCipherObserver() {
+    if (cipherObserver) {
+        cipherObserver.disconnect();
+        cipherObserver = null;
+    }
+}
+
+function initCipherTools() {
+    if (!isTasksRegistryPage()) {
+        stopCipherObserver();
+        return;
+    }
+
+    enhanceCipherCells();
+
+    if (!cipherInitDone) {
+        startCipherObserver();
+        cipherInitDone = true;
+    }
 }
 
 function start() {
