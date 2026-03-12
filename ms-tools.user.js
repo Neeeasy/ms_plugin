@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MS Tools
 // @namespace    ms-tools
-// @version      1.6.1
+// @version      1.6.2
 // @description  Инструменты для работы с ролями и задачами
 // @author       Kirill
 // @match        http://*/*
@@ -321,14 +321,25 @@
     border:none;
     background:transparent;
     cursor:pointer;
-    font-size:14px;
-    line-height:1;
-    padding:2px 4px;
-    border-radius:4px;
+    width:24px;
+    height:24px;
+    min-width:24px;
+    min-height:24px;
+    padding:0;
+    border-radius:6px;
     opacity:0;
-    transform:scale(.9);
-    transition:opacity .15s ease, transform .15s ease;
+    transform:scale(.92);
+    transition:
+        opacity .15s ease,
+        transform .15s ease,
+        background-color .15s ease,
+        color .15s ease;
     flex:0 0 auto;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    color:#1976d2;
+    position:relative;
 }
 
 .ag-row:hover .mstroy-cipher-copy-btn{
@@ -337,20 +348,55 @@
 }
 
 .mstroy-cipher-copy-btn:hover{
-    background:rgba(25,118,210,0.08);
+    background:rgba(25,118,210,0.10);
 }
 
-.mstroy-cipher-tooltip{
-    background:rgba(33,33,33,.95);
-    color:#fff;
-    padding:6px 10px;
-    border-radius:6px;
-    font-size:12px;
-    font-weight:600;
-    white-space:nowrap;
-    box-shadow:0 4px 14px rgba(0,0,0,.18);
+.mstroy-cipher-copy-btn:active{
+    transform:scale(.96);
+}
+
+.mstroy-cipher-copy-btn-icon{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:
+        opacity .16s ease,
+        transform .16s ease;
+}
+
+.mstroy-cipher-copy-btn-icon svg{
+    width:15px;
+    height:15px;
+    display:block;
+}
+
+.mstroy-cipher-copy-btn-icon-copy{
     opacity:1;
-    transition:opacity .18s ease, transform .18s ease;
+    transform:scale(1);
+}
+
+.mstroy-cipher-copy-btn-icon-check{
+    opacity:0;
+    transform:scale(.72);
+    color:#2e7d32;
+}
+
+.mstroy-cipher-copy-btn.is-copied{
+    background:rgba(46,125,50,0.10);
+    color:#2e7d32;
+    opacity:1;
+}
+
+.mstroy-cipher-copy-btn.is-copied .mstroy-cipher-copy-btn-icon-copy{
+    opacity:0;
+    transform:scale(.72);
+}
+
+.mstroy-cipher-copy-btn.is-copied .mstroy-cipher-copy-btn-icon-check{
+    opacity:1;
+    transform:scale(1);
 }
 `;
 
