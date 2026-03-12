@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MS Tools
 // @namespace    ms-tools
-// @version      1.0
+// @version      1.1
 // @description  Инструменты для работы с ролями
 // @author       Kirill
 // @match        http://*/*
@@ -209,10 +209,20 @@ const roleItem=getRoleItem(modal,TARGET_ROLE);
 
 if(!roleItem){
 
-actionBtn.textContent='Роль не найдена';
-actionBtn.disabled=true;
+// скрываем кнопку и статус если роли нет
+actionBtn.style.display='none';
+
+if(statusText){
+statusText.style.display='none';
+}
 
 return;
+}
+
+// показываем обратно если появилась
+actionBtn.style.display='';
+if(statusText){
+statusText.style.display='';
 }
 
 actionBtn.disabled=false;
@@ -230,6 +240,10 @@ actionBtn.textContent='Выдать прошлый период';
 
 statusText.textContent='Сейчас роль выключена';
 statusText.className='mstroy-status mstroy-status-off';
+
+}
+
+updateFilter();
 
 }
 
