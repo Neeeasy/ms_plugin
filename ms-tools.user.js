@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MS Tools
 // @namespace    ms-tools
-// @version      1.2
+// @version      1.3
 // @description  Инструменты для работы с ролями
 // @author       Kirill
 // @match        http://*/*
@@ -319,7 +319,7 @@ function createControls() {
 
         filterBtnRef = document.createElement('button');
         filterBtnRef.className = 'mstroy-btn';
-        filterBtnRef.textContent = 'Только выбранные';
+        filterBtnRef.textContent = 'Только назначенные';
 
         filterBtnRef.addEventListener('click', () => {
             filterEnabled = !filterEnabled;
