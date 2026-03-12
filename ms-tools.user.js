@@ -7,8 +7,8 @@
 // @match        http://*/*
 // @match        https://*/*
 // @icon         https://app.mstroy.tech/favicon.ico
-// @updateURL    https://raw.githubusercontent.com/79829893218n-netizen/ms_plugin/main/ms-tools.user.js
-// @downloadURL  https://raw.githubusercontent.com/79829893218n-netizen/ms_plugin/main/ms-tools.user.js
+// @updateURL    https://raw.githubusercontent.com/Neeeasy/ms_plugin/main/ms-tools.user.js
+// @downloadURL  https://raw.githubusercontent.com/Neeeasy/ms_plugin/main/ms-tools.user.js
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
