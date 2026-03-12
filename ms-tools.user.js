@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MS Tools
 // @namespace    ms-tools
-// @version      1.6
+// @version      1.6.1
 // @description  Инструменты для работы с ролями и задачами
 // @author       Kirill
 // @match        http://*/*
@@ -110,7 +110,7 @@
             await navigator.clipboard.writeText(text);
             return true;
         } catch {
-            const textarea = document.createElement('textarea');
+            const textarea = document.Element('textarea');
             textarea.value = text;
             textarea.style.position = 'fixed';
             textarea.style.opacity = '0';
@@ -461,36 +461,56 @@
     }
 
     function createCipherCopyButton(cipherText) {
-        const btn = document.createElement('button');
-        btn.className = 'mstroy-cipher-copy-btn';
-        btn.type = 'button';
-        btn.title = `Скопировать шифр: ${cipherText}`;
-        btn.textContent = '📋';
+    const btn = document.createElement('button');
+    btn.className = 'mstroy-cipher-copy-btn';
+    btn.type = 'button';
+    btn.title = `Скопировать шифр: ${cipherText}`;
+    btn.setAttribute('aria-label', `Скопировать шифр ${cipherText}`);
 
-        const stop = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-        };
+    btn.innerHTML = `
+        <span class="mstroy-cipher-copy-btn-icon mstroy-cipher-copy-btn-icon-copy" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+                <path d="M9 9.75A2.25 2.25 0 0 1 11.25 7.5h6A2.25 2.25 0 0 1 19.5 9.75v6A2.25 2.25 0 0 1 17.25 18h-6A2.25 2.25 0 0 1 9 15.75v-6Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                <path d="M15 7.5V6.75A2.25 2.25 0 0 0 12.75 4.5h-6A2.25 2.25 0 0 0 4.5 6.75v6A2.25 2.25 0 0 0 6.75 15H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </span>
+        <span class="mstroy-cipher-copy-btn-icon mstroy-cipher-copy-btn-icon-check" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+                <path d="M5 12.5 9.5 17 19 7.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </span>
+    `;
 
-        btn.addEventListener('mousedown', stop, true);
-        btn.addEventListener('mouseup', stop, true);
-        btn.addEventListener('click', async (e) => {
-            stop(e);
+    const stop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+    };
 
-            const ok = await copyToClipboard(cipherText);
+    btn.addEventListener('mousedown', stop, true);
+    btn.addEventListener('mouseup', stop, true);
 
-            if (ok) {
-                showCipherTooltip(btn, 'Скопировано');
-            } else {
-                showCipherTooltip(btn, 'Ошибка');
-            }
-        }, true);
+    btn.addEventListener('click', async (e) => {
+        stop(e);
 
-        btn.addEventListener('dblclick', stop, true);
+        const ok = await copyToClipboard(cipherText);
 
-        return btn;
-    }
+        if (ok) {
+            btn.classList.add('is-copied');
+            showCipherTooltip(btn, 'Скопировано');
+
+            setTimeout(() => {
+                btn.classList.remove('is-copied');
+            }, 900);
+        } else {
+            showCipherTooltip(btn, 'Ошибка');
+        }
+    }, true);
+
+    btn.addEventListener('dblclick', stop, true);
+
+    return btn;
+}
 
     function buildCipherCellContent(cell, cipherText) {
         cell.dataset.mstroyCipherText = cipherText;
