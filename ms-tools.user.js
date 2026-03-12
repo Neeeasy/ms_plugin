@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MS Tools
 // @namespace    ms-tools
-// @version      1.4
+// @version      1.5
 // @description  Инструменты для работы с ролями
 // @author       Kirill
 // @match        http://*/*
@@ -545,12 +545,24 @@ function createCipherCopyButton(cipherText) {
 }
 
 function enhanceCipherCell(cell) {
-    if (!cell || cell.dataset.mstroyCipherEnhanced === '1') return;
+    if (!cell) return;
 
     const cipherText = (cell.getAttribute('title') || cell.textContent || '').trim();
     if (!cipherText) return;
 
-    cell.dataset.mstroyCipherEnhanced = '1';
+    const existingBtn = cell.querySelector('.mstroy-cipher-copy-btn');
+    const existingText = cell.dataset.mstroyCipherText || '';
+
+    if (existingBtn && existingText === cipherText) {
+        return;
+    }
+
+    cell.dataset.mstroyCipherText = cipherText;
+
+    if (existingBtn) {
+        existingBtn.remove();
+    }
+
     cell.style.display = 'flex';
     cell.style.alignItems = 'center';
     cell.style.justifyContent = 'space-between';
@@ -561,11 +573,11 @@ function enhanceCipherCell(cell) {
 
     if (!textSpan) {
         textSpan = document.createElement('span');
-        textSpan.textContent = cipherText;
         cell.textContent = '';
         cell.appendChild(textSpan);
     }
 
+    textSpan.textContent = cipherText;
     textSpan.style.minWidth = '0';
     textSpan.style.overflow = 'hidden';
     textSpan.style.textOverflow = 'ellipsis';
@@ -579,7 +591,9 @@ function enhanceCipherCell(cell) {
 function enhanceCipherCells() {
     if (!isTasksRegistryPage()) return;
 
-    getCipherCells().forEach(enhanceCipherCell);
+    getCipherCells().forEach(cell => {
+        requestAnimationFrame(() => enhanceCipherCell(cell));
+    });
 }
 
 function startCipherObserver() {
@@ -588,8 +602,9 @@ function startCipherObserver() {
     if (!isTasksRegistryPage()) return;
 
     const gridRoot =
-        document.querySelector('.ag-root') ||
+        document.querySelector('.ag-center-cols-container') ||
         document.querySelector('.ag-body-viewport') ||
+        document.querySelector('.ag-root') ||
         document.body;
 
     cipherObserver = new MutationObserver(() => {
@@ -598,7 +613,9 @@ function startCipherObserver() {
 
     cipherObserver.observe(gridRoot, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['title']
     });
 
     enhanceCipherCells();
