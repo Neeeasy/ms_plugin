@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MS Tools
 // @namespace    ms-tools
-// @version      1.1
+// @version      1.2
 // @description  Инструменты для работы с ролями
 // @author       Kirill
 // @match        http://*/*
@@ -18,268 +18,218 @@
 
 const TARGET_ROLE = 'Возможность вносить изменения в сменные задания за прошлый период';
 
-let actionBtn=null;
-let statusText=null;
-let panel=null;
-let lastUrl=location.href;
-let intervalId=null;
-let filterEnabled=false;
+let actionBtn = null;
+let statusText = null;
+let panel = null;
+let lastUrl = location.href;
+let intervalId = null;
+let filterEnabled = false;
+let filterBtnRef = null;
 
-function isCorrectPage(){
-return location.pathname.startsWith('/settings/userscontrol');
+function isCorrectPage() {
+    return location.pathname.startsWith('/settings/userscontrol');
 }
 
-function getRolesModal(){
-const candidates=[...document.querySelectorAll('div,section')];
+function getRolesModal() {
+    const candidates = [...document.querySelectorAll('div, section')];
 
-for(const el of candidates){
+    for (const el of candidates) {
+        const text = el.innerText || '';
 
-const text=el.innerText||'';
+        if (
+            text.includes('Редактирование пользователя') &&
+            text.includes('Назначение ролей') &&
+            text.includes('ПОЛЬЗОВАТЕЛЬ') &&
+            text.includes('РОЛИ') &&
+            text.includes('ИНТЕГРАЦИИ')
+        ) {
+            return el;
+        }
+    }
 
-if(
-text.includes('Редактирование пользователя') &&
-text.includes('Назначение ролей') &&
-text.includes('ПОЛЬЗОВАТЕЛЬ') &&
-text.includes('РОЛИ') &&
-text.includes('ИНТЕГРАЦИИ')
-){
-return el;
+    return null;
 }
 
+function isRolesModalOpen() {
+    if (!isCorrectPage()) return false;
+
+    const modal = getRolesModal();
+    if (!modal) return false;
+
+    return modal.querySelectorAll('.q-checkbox__label').length > 0;
 }
 
-return null;
+function getUserName(modal) {
+    if (!modal) return '';
+
+    const text = modal.innerText || '';
+    const match = text.match(/Редактирование пользователя\s+([^\n]+)/i);
+
+    if (match && match[1]) {
+        return match[1].trim();
+    }
+
+    return '';
 }
 
-function isRolesModalOpen(){
+function getRoleItems(modal) {
+    if (!modal) return [];
 
-if(!isCorrectPage()) return false;
+    const labels = [...modal.querySelectorAll('.q-checkbox__label')];
 
-const modal=getRolesModal();
-if(!modal) return false;
+    return labels.map(label => {
+        const checkbox = label.closest('.q-checkbox');
+        const inner = checkbox?.querySelector('.q-checkbox__inner');
 
-return modal.querySelectorAll('.q-checkbox__label').length>0;
+        return {
+            label,
+            checkbox,
+            inner,
+            row: checkbox?.parentElement,
+            text: label.textContent.trim(),
+            checked: !!inner?.classList.contains('q-checkbox__inner--truthy')
+        };
+    }).filter(item => item.checkbox && item.inner && item.row);
 }
 
-function getUserName(modal){
-
-if(!modal) return '';
-
-const text=modal.innerText||'';
-
-const match=text.match(/Редактирование пользователя\s+([^\n]+)/i);
-
-if(match && match[1]){
-return match[1].trim();
+function getRoleItem(modal, roleName) {
+    const items = getRoleItems(modal);
+    return items.find(i => i.text === roleName) || null;
 }
 
-return '';
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const ok = document.execCommand('copy');
+        textarea.remove();
+
+        return ok;
+    }
 }
 
-function getRoleItems(modal){
-
-const labels=[...modal.querySelectorAll('.q-checkbox__label')];
-
-return labels.map(label=>{
-
-const checkbox=label.closest('.q-checkbox');
-const inner=checkbox?.querySelector('.q-checkbox__inner');
-
-return{
-label,
-checkbox,
-inner,
-row:checkbox?.parentElement,
-text:label.textContent.trim(),
-checked:inner?.classList.contains('q-checkbox__inner--truthy')
-};
-
-}).filter(Boolean);
-
+function buildTelegramText(action, fio) {
+    return `${action} ${TARGET_ROLE}\n\n\`${fio}\``;
 }
 
-function getRoleItem(modal,roleName){
+function showCopied() {
+    if (!statusText) return;
 
-const items=getRoleItems(modal);
+    statusText.textContent = '✔ Скопировано для Telegram';
+    statusText.className = 'mstroy-status mstroy-status-copy';
 
-return items.find(i=>i.text===roleName)||null;
-
+    setTimeout(updateControls, 1600);
 }
 
-async function copyToClipboard(text){
+async function toggleTargetRole() {
+    const modal = getRolesModal();
+    if (!modal) return;
 
-try{
+    const roleItem = getRoleItem(modal, TARGET_ROLE);
 
-await navigator.clipboard.writeText(text);
-return true;
+    if (!roleItem) {
+        setStatus('Роль не найдена');
+        return;
+    }
 
-}catch{
+    const fio = getUserName(modal) || 'ФИО не найдено';
+    const isGiveAction = actionBtn && actionBtn.textContent.includes('Выдать');
 
-const textarea=document.createElement('textarea');
+    roleItem.checkbox.click();
 
-textarea.value=text;
-textarea.style.position='fixed';
-textarea.style.opacity='0';
+    if (isGiveAction) {
+        const message = buildTelegramText('Забрать', fio);
+        const copied = await copyToClipboard(message);
 
-document.body.appendChild(textarea);
+        if (copied) {
+            showCopied();
+        } else {
+            setStatus('Ошибка копирования');
+        }
+    } else {
+        setStatus('Роль забрана');
+    }
 
-textarea.focus();
-textarea.select();
-
-const ok=document.execCommand('copy');
-
-textarea.remove();
-
-return ok;
-
+    setTimeout(updateControls, 200);
+    setTimeout(updateControls, 500);
 }
 
+function setStatus(text) {
+    if (statusText) {
+        statusText.textContent = text;
+    }
 }
 
-function buildTelegramText(action,fio){
+function updateControls() {
+    const modal = getRolesModal();
+    if (!modal || !actionBtn) return;
 
-return `${action} ${TARGET_ROLE}\n\n\`${fio}\``;
+    const roleItem = getRoleItem(modal, TARGET_ROLE);
 
+    if (!roleItem) {
+        actionBtn.style.display = 'none';
+
+        if (statusText) {
+            statusText.style.display = 'none';
+        }
+
+        updateFilter();
+        return;
+    }
+
+    actionBtn.style.display = '';
+
+    if (statusText) {
+        statusText.style.display = '';
+    }
+
+    actionBtn.disabled = false;
+
+    if (roleItem.checked) {
+        actionBtn.textContent = 'Забрать прошлый период';
+        statusText.textContent = 'Сейчас роль включена';
+        statusText.className = 'mstroy-status mstroy-status-on';
+    } else {
+        actionBtn.textContent = 'Выдать прошлый период';
+        statusText.textContent = 'Сейчас роль выключена';
+        statusText.className = 'mstroy-status mstroy-status-off';
+    }
+
+    updateFilter();
 }
 
-function showCopied(){
+function updateFilter() {
+    const modal = getRolesModal();
+    if (!modal) return;
 
-statusText.textContent='✔ Скопировано для Telegram';
-statusText.className='mstroy-status mstroy-status-copy';
+    const items = getRoleItems(modal);
 
-setTimeout(updateControls,1600);
-
+    items.forEach(item => {
+        if (filterEnabled && !item.checked) {
+            item.row.style.display = 'none';
+        } else {
+            item.row.style.display = '';
+        }
+    });
 }
 
-async function toggleTargetRole(){
+function createStyles() {
+    if (document.getElementById('mstroy-style')) return;
 
-const modal=getRolesModal();
-if(!modal) return;
+    const style = document.createElement('style');
+    style.id = 'mstroy-style';
 
-const roleItem=getRoleItem(modal,TARGET_ROLE);
-
-if(!roleItem){
-setStatus('Роль не найдена');
-return;
-}
-
-const fio=getUserName(modal)||'ФИО не найдено';
-
-const isGiveAction=actionBtn.textContent.includes('Выдать');
-
-roleItem.checkbox.click();
-
-if(isGiveAction){
-
-const message=buildTelegramText('Забрать',fio);
-
-const copied=await copyToClipboard(message);
-
-if(copied){
-showCopied();
-}else{
-setStatus('Ошибка копирования');
-}
-
-}else{
-
-setStatus('Роль забрана');
-
-}
-
-setTimeout(updateControls,200);
-setTimeout(updateControls,500);
-
-}
-
-function setStatus(text){
-
-if(statusText){
-statusText.textContent=text;
-}
-
-}
-
-function updateControls(){
-
-const modal=getRolesModal();
-if(!modal||!actionBtn) return;
-
-const roleItem=getRoleItem(modal,TARGET_ROLE);
-
-if(!roleItem){
-
-// скрываем кнопку и статус если роли нет
-actionBtn.style.display='none';
-
-if(statusText){
-statusText.style.display='none';
-}
-
-return;
-}
-
-// показываем обратно если появилась
-actionBtn.style.display='';
-if(statusText){
-statusText.style.display='';
-}
-
-actionBtn.disabled=false;
-
-if(roleItem.checked){
-
-actionBtn.textContent='Забрать прошлый период';
-
-statusText.textContent='Сейчас роль включена';
-statusText.className='mstroy-status mstroy-status-on';
-
-}else{
-
-actionBtn.textContent='Выдать прошлый период';
-
-statusText.textContent='Сейчас роль выключена';
-statusText.className='mstroy-status mstroy-status-off';
-
-}
-
-updateFilter();
-
-}
-
-updateFilter();
-
-}
-
-function updateFilter(){
-
-const modal=getRolesModal();
-if(!modal) return;
-
-const items=getRoleItems(modal);
-
-items.forEach(item=>{
-
-if(filterEnabled && !item.checked){
-item.row.style.display='none';
-}else{
-item.row.style.display='';
-}
-
-});
-
-}
-
-function createStyles(){
-
-if(document.getElementById('mstroy-style')) return;
-
-const style=document.createElement('style');
-
-style.id='mstroy-style';
-
-style.textContent=`
-
+    style.textContent = `
 .mstroy-panel{
 display:flex;
 align-items:center;
@@ -290,6 +240,19 @@ padding:8px 10px;
 border:1px solid rgba(0,0,0,0.12);
 border-radius:6px;
 background:#fafafa;
+}
+
+.mstroy-panel-left{
+display:flex;
+align-items:center;
+gap:8px;
+}
+
+.mstroy-panel-right{
+display:flex;
+align-items:center;
+gap:8px;
+margin-left:auto;
 }
 
 .mstroy-btn{
@@ -304,6 +267,11 @@ cursor:pointer;
 
 .mstroy-btn:hover{
 background:rgba(25,118,210,0.08);
+}
+
+.mstroy-btn-active{
+background:#1976d2;
+color:#fff;
 }
 
 .mstroy-status{
@@ -322,166 +290,147 @@ color:#c62828;
 .mstroy-status-copy{
 color:#1565c0;
 }
-
 `;
 
-document.head.appendChild(style);
-
+    document.head.appendChild(style);
 }
 
-function createControls(){
+function createControls() {
+    createStyles();
 
-createStyles();
+    const modal = getRolesModal();
+    if (!modal) return false;
 
-const modal=getRolesModal();
-if(!modal) return false;
+    const listContainer = modal.querySelector('.q-checkbox')?.parentElement?.parentElement;
+    if (!listContainer || !listContainer.parentElement) return false;
 
-const listContainer=modal.querySelector('.q-checkbox')?.parentElement?.parentElement;
+    panel = modal.querySelector('#mstroy-panel');
 
-if(!listContainer) return false;
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'mstroy-panel';
+        panel.className = 'mstroy-panel';
 
-panel=modal.querySelector('#mstroy-panel');
+        const left = document.createElement('div');
+        left.className = 'mstroy-panel-left';
 
-if(!panel){
+        const right = document.createElement('div');
+        right.className = 'mstroy-panel-right';
 
-panel=document.createElement('div');
+        filterBtnRef = document.createElement('button');
+        filterBtnRef.className = 'mstroy-btn';
+        filterBtnRef.textContent = 'Только выбранные';
 
-panel.id='mstroy-panel';
-panel.className='mstroy-panel';
+        filterBtnRef.addEventListener('click', () => {
+            filterEnabled = !filterEnabled;
 
-const left=document.createElement('div');
+            filterBtnRef.classList.toggle('mstroy-btn-active', filterEnabled);
+            updateFilter();
+        });
 
-const filterBtn=document.createElement('button');
-filterBtn.className='mstroy-btn';
-filterBtn.textContent='Только выбранные';
+        left.appendChild(filterBtnRef);
 
-filterBtn.onclick=()=>{
+        actionBtn = document.createElement('button');
+        actionBtn.className = 'mstroy-btn';
+        actionBtn.textContent = '...';
+        actionBtn.addEventListener('click', toggleTargetRole);
 
-filterEnabled=!filterEnabled;
+        statusText = document.createElement('div');
+        statusText.className = 'mstroy-status';
 
-filterBtn.style.background=filterEnabled?'#1976d2':'#fff';
-filterBtn.style.color=filterEnabled?'#fff':'#1976d2';
+        right.appendChild(actionBtn);
+        right.appendChild(statusText);
 
-updateFilter();
+        panel.appendChild(left);
+        panel.appendChild(right);
 
-};
+        listContainer.parentElement.insertBefore(panel, listContainer);
+    } else {
+        filterBtnRef = panel.querySelector('.mstroy-panel-left .mstroy-btn');
+        actionBtn = panel.querySelector('.mstroy-panel-right .mstroy-btn');
+        statusText = panel.querySelector('.mstroy-status');
+    }
 
-left.appendChild(filterBtn);
-
-actionBtn=document.createElement('button');
-actionBtn.className='mstroy-btn';
-actionBtn.textContent='...';
-
-statusText=document.createElement('div');
-statusText.className='mstroy-status';
-
-actionBtn.addEventListener('click',toggleTargetRole);
-
-panel.appendChild(left);
-panel.appendChild(actionBtn);
-panel.appendChild(statusText);
-
-listContainer.parentElement.insertBefore(panel,listContainer);
-
-}else{
-
-actionBtn=panel.querySelectorAll('.mstroy-btn')[1];
-statusText=panel.querySelector('.mstroy-status');
-
+    updateControls();
+    return true;
 }
 
-updateControls();
+function removeControls() {
+    document.getElementById('mstroy-panel')?.remove();
 
-return true;
-
+    panel = null;
+    actionBtn = null;
+    statusText = null;
+    filterBtnRef = null;
 }
 
-function removeControls(){
+function tick() {
+    if (!isCorrectPage()) {
+        removeControls();
+        return;
+    }
 
-document.getElementById('mstroy-panel')?.remove();
+    if (!isRolesModalOpen()) {
+        removeControls();
+        return;
+    }
 
-panel=null;
-actionBtn=null;
-statusText=null;
-
+    createControls();
+    updateControls();
 }
 
-function tick(){
+function onUrlChange() {
+    if (location.href === lastUrl) return;
 
-if(!isCorrectPage()){
-removeControls();
-return;
+    lastUrl = location.href;
+    removeControls();
+
+    setTimeout(tick, 100);
+    setTimeout(tick, 500);
+    setTimeout(tick, 1200);
 }
 
-if(!isRolesModalOpen()){
-removeControls();
-return;
+function patchHistoryMethods() {
+    const push = history.pushState;
+    const replace = history.replaceState;
+
+    history.pushState = function (...args) {
+        const result = push.apply(this, args);
+        window.dispatchEvent(new Event('tm-location-change'));
+        return result;
+    };
+
+    history.replaceState = function (...args) {
+        const result = replace.apply(this, args);
+        window.dispatchEvent(new Event('tm-location-change'));
+        return result;
+    };
 }
 
-createControls();
-updateControls();
+function start() {
+    if (intervalId) return;
 
-}
+    document.addEventListener('click', () => {
+        setTimeout(tick, 50);
+        setTimeout(tick, 200);
+    }, true);
 
-function onUrlChange(){
+    document.addEventListener('change', () => {
+        setTimeout(updateControls, 100);
+    }, true);
 
-if(location.href===lastUrl) return;
+    window.addEventListener('popstate', onUrlChange);
+    window.addEventListener('tm-location-change', onUrlChange);
 
-lastUrl=location.href;
+    intervalId = setInterval(() => {
+        onUrlChange();
+        tick();
+    }, 700);
 
-removeControls();
+    setTimeout(tick, 300);
+    setTimeout(tick, 1000);
 
-setTimeout(tick,100);
-setTimeout(tick,500);
-setTimeout(tick,1200);
-
-}
-
-function patchHistoryMethods(){
-
-const push=history.pushState;
-const replace=history.replaceState;
-
-history.pushState=function(...args){
-const result=push.apply(this,args);
-window.dispatchEvent(new Event('tm-location-change'));
-return result;
-};
-
-history.replaceState=function(...args){
-const result=replace.apply(this,args);
-window.dispatchEvent(new Event('tm-location-change'));
-return result;
-};
-
-}
-
-function start(){
-
-if(intervalId) return;
-
-document.addEventListener('click',()=>{
-setTimeout(tick,50);
-setTimeout(tick,200);
-},true);
-
-document.addEventListener('change',()=>{
-setTimeout(updateControls,100);
-},true);
-
-window.addEventListener('popstate',onUrlChange);
-window.addEventListener('tm-location-change',onUrlChange);
-
-intervalId=setInterval(()=>{
-onUrlChange();
-tick();
-},700);
-
-setTimeout(tick,300);
-setTimeout(tick,1000);
-
-console.log('MSTroy Tools loaded');
-
+    console.log('MS Tools v1.2 loaded');
 }
 
 patchHistoryMethods();
