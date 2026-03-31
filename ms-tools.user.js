@@ -1,11 +1,19 @@
 // ==UserScript==
 // @name         MS Tools
 // @namespace    ms-tools
-// @version      1.6.2
-// @description  Инструменты для работы с ролями и задачами
+// @version      1.6.4
+// @description  Инструменты для работы с ролями, задачами, фильтрами и поиском по объектам проекта
 // @author       Kirill
-// @match        http://*/*
-// @match        https://*/*
+// @match        https://app.mstroy.tech/*
+// @match        https://vsgm.app.mstroy.tech/*
+// @match        https://ms1520.npsgk.ru/*
+// @match        https://ms.ruhw.ru/*
+// @match        https://mstroy.aodim.ru/*
+// @match        https://rzd.mstroy.tech/*
+// @match        https://app.dev-stroyka.online/*
+// @match        https://app.bsmuk.ru/*
+// @match        https://mstroy.elteza.ru/*
+// @match        https://mstroy.fmp.ru/*
 // @icon         https://app.mstroy.tech/favicon.ico
 // @updateURL    https://raw.githubusercontent.com/Neeeasy/ms_plugin/main/ms-tools.user.js
 // @downloadURL  https://raw.githubusercontent.com/Neeeasy/ms_plugin/main/ms-tools.user.js
@@ -18,6 +26,13 @@
 
     const TARGET_ROLE = 'Возможность вносить изменения в сменные задания за прошлый период';
 
+    const IDS = {
+        columnFilterWrap: 'mstroy-filter-search-wrap',
+        columnFilterInput: 'mstroy-filter-search',
+        projectObjectsWrap: 'mstroy-project-objects-search-wrap',
+        projectObjectsInput: 'mstroy-project-objects-search',
+    };
+
     let actionBtn = null;
     let statusText = null;
     let panel = null;
@@ -29,6 +44,62 @@
     let cipherObserver = null;
     let cipherInitDone = false;
     let cipherEnhanceTimer = null;
+
+    let globalObserver = null;
+
+    function normalize(text) {
+        return (text || '')
+            .replace(/\u00A0/g, ' ')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function isVisible(el) {
+        if (!el || !document.documentElement.contains(el)) return false;
+        const s = window.getComputedStyle(el);
+        return s.display !== 'none' &&
+               s.visibility !== 'hidden' &&
+               parseFloat(s.opacity || '1') !== 0;
+    }
+
+    function stopEvent(e) {
+        e.stopPropagation();
+    }
+
+    function createSearchBox({ wrapId, inputId, placeholder, onInput }) {
+        const wrap = document.createElement('div');
+        wrap.id = wrapId;
+        wrap.style.background = '#fff';
+        wrap.style.padding = '8px 0 12px 0';
+        wrap.style.width = '100%';
+        wrap.style.boxSizing = 'border-box';
+
+        const input = document.createElement('input');
+        input.id = inputId;
+        input.type = 'text';
+        input.placeholder = placeholder;
+        input.autocomplete = 'off';
+
+        input.style.width = '100%';
+        input.style.boxSizing = 'border-box';
+        input.style.padding = '8px 12px';
+        input.style.border = '1px solid #dcdfe6';
+        input.style.borderRadius = '6px';
+        input.style.fontSize = '14px';
+        input.style.background = '#fff';
+        input.style.outline = 'none';
+
+        input.addEventListener('input', () => onInput(input.value));
+        input.addEventListener('keydown', stopEvent);
+        input.addEventListener('keyup', stopEvent);
+        input.addEventListener('keypress', stopEvent);
+        input.addEventListener('mousedown', stopEvent);
+        input.addEventListener('click', stopEvent);
+
+        wrap.appendChild(input);
+        return { wrap, input };
+    }
 
     function isCorrectPage() {
         return location.pathname.startsWith('/settings/userscontrol');
@@ -110,7 +181,7 @@
             await navigator.clipboard.writeText(text);
             return true;
         } catch {
-            const textarea = document.Element('textarea');
+            const textarea = document.createElement('textarea');
             textarea.value = text;
             textarea.style.position = 'fixed';
             textarea.style.opacity = '0';
@@ -507,56 +578,56 @@
     }
 
     function createCipherCopyButton(cipherText) {
-    const btn = document.createElement('button');
-    btn.className = 'mstroy-cipher-copy-btn';
-    btn.type = 'button';
-    btn.title = `Скопировать шифр: ${cipherText}`;
-    btn.setAttribute('aria-label', `Скопировать шифр ${cipherText}`);
+        const btn = document.createElement('button');
+        btn.className = 'mstroy-cipher-copy-btn';
+        btn.type = 'button';
+        btn.title = `Скопировать шифр: ${cipherText}`;
+        btn.setAttribute('aria-label', `Скопировать шифр ${cipherText}`);
 
-    btn.innerHTML = `
-        <span class="mstroy-cipher-copy-btn-icon mstroy-cipher-copy-btn-icon-copy" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-                <path d="M9 9.75A2.25 2.25 0 0 1 11.25 7.5h6A2.25 2.25 0 0 1 19.5 9.75v6A2.25 2.25 0 0 1 17.25 18h-6A2.25 2.25 0 0 1 9 15.75v-6Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                <path d="M15 7.5V6.75A2.25 2.25 0 0 0 12.75 4.5h-6A2.25 2.25 0 0 0 4.5 6.75v6A2.25 2.25 0 0 0 6.75 15H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        </span>
-        <span class="mstroy-cipher-copy-btn-icon mstroy-cipher-copy-btn-icon-check" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-                <path d="M5 12.5 9.5 17 19 7.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        </span>
-    `;
+        btn.innerHTML = `
+            <span class="mstroy-cipher-copy-btn-icon mstroy-cipher-copy-btn-icon-copy" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M9 9.75A2.25 2.25 0 0 1 11.25 7.5h6A2.25 2.25 0 0 1 19.5 9.75v6A2.25 2.25 0 0 1 17.25 18h-6A2.25 2.25 0 0 1 9 15.75v-6Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                    <path d="M15 7.5V6.75A2.25 2.25 0 0 0 12.75 4.5h-6A2.25 2.25 0 0 0 4.5 6.75v6A2.25 2.25 0 0 0 6.75 15H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </span>
+            <span class="mstroy-cipher-copy-btn-icon mstroy-cipher-copy-btn-icon-check" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M5 12.5 9.5 17 19 7.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </span>
+        `;
 
-    const stop = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-    };
+        const stop = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+        };
 
-    btn.addEventListener('mousedown', stop, true);
-    btn.addEventListener('mouseup', stop, true);
+        btn.addEventListener('mousedown', stop, true);
+        btn.addEventListener('mouseup', stop, true);
 
-    btn.addEventListener('click', async (e) => {
-        stop(e);
+        btn.addEventListener('click', async (e) => {
+            stop(e);
 
-        const ok = await copyToClipboard(cipherText);
+            const ok = await copyToClipboard(cipherText);
 
-        if (ok) {
-            btn.classList.add('is-copied');
-            showCipherTooltip(btn, 'Скопировано');
+            if (ok) {
+                btn.classList.add('is-copied');
+                showCipherTooltip(btn, 'Скопировано');
 
-            setTimeout(() => {
-                btn.classList.remove('is-copied');
-            }, 900);
-        } else {
-            showCipherTooltip(btn, 'Ошибка');
-        }
-    }, true);
+                setTimeout(() => {
+                    btn.classList.remove('is-copied');
+                }, 900);
+            } else {
+                showCipherTooltip(btn, 'Ошибка');
+            }
+        }, true);
 
-    btn.addEventListener('dblclick', stop, true);
+        btn.addEventListener('dblclick', stop, true);
 
-    return btn;
-}
+        return btn;
+    }
 
     function buildCipherCellContent(cell, cipherText) {
         cell.dataset.mstroyCipherText = cipherText;
@@ -683,7 +754,256 @@
         }
     }
 
+    // =========================================================
+    // 1. ПОИСК В "ФИЛЬТР ПО СТОЛБЦУ"
+    // =========================================================
+
+    function findOpenFilterModal() {
+        const nodes = [...document.querySelectorAll('div, section')];
+
+        for (const node of nodes) {
+            if (!isVisible(node)) continue;
+            const text = node.innerText || '';
+
+            if (
+                text.includes('Фильтр по столбцу') &&
+                text.includes('Отменить') &&
+                text.includes('Применить')
+            ) {
+                return node;
+            }
+        }
+
+        return null;
+    }
+
+    function findFilterListContainer(modal) {
+        if (!modal) return null;
+
+        const checkboxes = [...modal.querySelectorAll('input[type="checkbox"]')];
+        if (!checkboxes.length) return null;
+
+        for (const checkbox of checkboxes) {
+            let current = checkbox.parentElement;
+
+            while (current && current !== modal) {
+                const count = current.querySelectorAll('input[type="checkbox"]').length;
+                const text = normalize(current.innerText);
+
+                if (count >= 3 && text.length > 0) {
+                    return current;
+                }
+
+                current = current.parentElement;
+            }
+        }
+
+        return null;
+    }
+
+    function getFilterRows(listContainer) {
+        if (!listContainer) return [];
+
+        const checkboxes = [...listContainer.querySelectorAll('input[type="checkbox"]')];
+        const rows = [];
+
+        for (const checkbox of checkboxes) {
+            let row = checkbox.closest('label') || checkbox.parentElement;
+
+            while (row && row !== listContainer) {
+                const rowText = normalize(row.innerText);
+                const nestedCheckboxes = row.querySelectorAll('input[type="checkbox"]').length;
+
+                if (rowText && nestedCheckboxes === 1) {
+                    break;
+                }
+
+                row = row.parentElement;
+            }
+
+            if (row && row !== listContainer && !rows.includes(row)) {
+                rows.push(row);
+            }
+        }
+
+        return rows;
+    }
+
+    function applyFilterModalSearch(listContainer, query) {
+        const q = normalize(query);
+        const rows = getFilterRows(listContainer);
+
+        rows.forEach(row => {
+            const rowText = normalize(row.innerText);
+            row.style.display = !q || rowText.includes(q) ? '' : 'none';
+        });
+    }
+
+    function injectFilterModalSearch(modal) {
+        if (!modal || !isVisible(modal)) return;
+
+        const listContainer = findFilterListContainer(modal);
+        if (!listContainer) return;
+
+        const existing = modal.querySelector(`#${IDS.columnFilterWrap}`);
+        if (existing) {
+            const input = existing.querySelector('input');
+            if (input) {
+                applyFilterModalSearch(listContainer, input.value);
+            }
+            return;
+        }
+
+        const { wrap, input } = createSearchBox({
+            wrapId: IDS.columnFilterWrap,
+            inputId: IDS.columnFilterInput,
+            placeholder: 'Поиск по значениям...',
+            onInput: (value) => applyFilterModalSearch(listContainer, value)
+        });
+
+        wrap.style.position = 'sticky';
+        wrap.style.top = '0';
+        wrap.style.zIndex = '10';
+
+        listContainer.insertBefore(wrap, listContainer.firstChild);
+
+        setTimeout(() => {
+            if (isVisible(input)) input.focus();
+        }, 50);
+    }
+
+    // =========================================================
+    // 2. ПОИСК В "ОБЪЕКТЫ ПРОЕКТА"
+    // =========================================================
+
+    function findProjectModal() {
+        return document.querySelector('.EditProjectModal');
+    }
+
+    function findProjectTabs(modal) {
+        if (!modal) return null;
+        return modal.querySelector('.EditProjectModalTabs');
+    }
+
+    function findObjectsPanel(modal) {
+        if (!modal) return null;
+        return modal.querySelector('.EditProjectObjectsModal');
+    }
+
+    function getProjectObjectItems(modal) {
+        if (!modal) return [];
+        return [...modal.querySelectorAll('.ProjectObjectsPanelItem')];
+    }
+
+    function getProjectObjectSearchText(item) {
+        if (!item) return '';
+
+        const inputs = [...item.querySelectorAll('input, textarea')];
+        const values = inputs
+            .map(input => (input.value || '').trim())
+            .filter(Boolean);
+
+        const fullName = values[0] || '';
+        const shortName = values[1] || '';
+
+        return normalize(`${fullName} ${shortName}`);
+    }
+
+    function applyProjectObjectsSearch(modal, query) {
+        const q = normalize(query);
+        const items = getProjectObjectItems(modal);
+
+        items.forEach(item => {
+            const text = getProjectObjectSearchText(item);
+            const match = !q || text.includes(q);
+
+            item.style.display = match ? '' : 'none';
+            item.style.visibility = match ? '' : 'hidden';
+            item.style.pointerEvents = match ? '' : 'none';
+        });
+
+        const content = modal.querySelector('.EditProjectObjectsModal-virtualScroll .q-virtual-scroll__content');
+        if (content) {
+            requestAnimationFrame(() => {
+                const hasVisible = items.some(item => item.style.display !== 'none');
+                content.style.minHeight = !hasVisible && q ? '120px' : '';
+            });
+        }
+    }
+
+    function injectProjectObjectsSearch(modal) {
+        if (!modal || !isVisible(modal)) return;
+
+        const tabs = findProjectTabs(modal);
+        const objectsPanel = findObjectsPanel(modal);
+        if (!tabs || !objectsPanel) return;
+
+        const existing = modal.querySelector(`#${IDS.projectObjectsWrap}`);
+        if (existing) {
+            const input = existing.querySelector('input');
+            if (input) {
+                applyProjectObjectsSearch(modal, input.value);
+            }
+            return;
+        }
+
+        const { wrap, input } = createSearchBox({
+            wrapId: IDS.projectObjectsWrap,
+            inputId: IDS.projectObjectsInput,
+            placeholder: 'Поиск по полному и краткому наименованию...',
+            onInput: (value) => applyProjectObjectsSearch(modal, value)
+        });
+
+        wrap.style.marginTop = '8px';
+        wrap.style.marginBottom = '8px';
+        wrap.style.flex = '0 0 auto';
+
+        tabs.insertAdjacentElement('afterend', wrap);
+    }
+
+    function runSearchInjections() {
+        const filterModal = findOpenFilterModal();
+        if (filterModal) {
+            injectFilterModalSearch(filterModal);
+        }
+
+        const projectModal = findProjectModal();
+        if (projectModal) {
+            injectProjectObjectsSearch(projectModal);
+
+            const searchInput = projectModal.querySelector(`#${IDS.projectObjectsInput}`);
+            if (searchInput) {
+                applyProjectObjectsSearch(projectModal, searchInput.value);
+            }
+        }
+    }
+
+    function startGlobalObserver() {
+        if (globalObserver) return;
+
+        globalObserver = new MutationObserver(() => {
+            runSearchInjections();
+
+            if (isCorrectPage() && isRolesModalOpen()) {
+                createControls();
+                updateControls();
+            }
+
+            if (isTasksRegistryPage()) {
+                scheduleEnhanceCipherCells(0);
+            }
+        });
+
+        globalObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true
+        });
+    }
+
     function tick() {
+        runSearchInjections();
+
         if (isTasksRegistryPage()) {
             initCipherTools();
         } else {
@@ -738,6 +1058,9 @@
     function start() {
         if (intervalId) return;
 
+        createStyles();
+        startGlobalObserver();
+
         document.addEventListener('click', () => {
             setTimeout(tick, 50);
             setTimeout(tick, 200);
@@ -745,14 +1068,18 @@
                 if (isTasksRegistryPage()) {
                     scheduleEnhanceCipherCells(0);
                 }
+                runSearchInjections();
             }, 80);
         }, true);
 
         document.addEventListener('change', () => {
             setTimeout(updateControls, 100);
+
             if (isTasksRegistryPage()) {
                 scheduleEnhanceCipherCells(0);
             }
+
+            runSearchInjections();
         }, true);
 
         document.addEventListener('scroll', () => {
@@ -780,13 +1107,12 @@
 
         setTimeout(tick, 300);
         setTimeout(tick, 1000);
-        setTimeout(() => {
-            if (isTasksRegistryPage()) {
-                scheduleEnhanceCipherCells(0);
-            }
-        }, 1500);
+        setTimeout(tick, 1500);
+        setTimeout(runSearchInjections, 400);
+        setTimeout(runSearchInjections, 1200);
+        setTimeout(runSearchInjections, 2500);
 
-        console.log('MS Tools v1.5 loaded');
+        console.log('MS Tools v1.6.3 loaded');
     }
 
     patchHistoryMethods();
